@@ -1,0 +1,2174 @@
+<html lang="en"><head>
+  <meta charset="UTF-8">
+  <title>PPPP WebRTC Viewer</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #111;
+      color: #eee;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+    header {
+      padding: 10px 16px;
+      background: #181818;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid #333;
+    }
+    header h1 {
+      font-size: 16px;
+      margin: 0;
+      margin-right: 16px;
+      color: #f5f5f5;
+    }
+    label {
+      font-size: 13px;
+      margin-right: 4px;
+    }
+    select, button {
+      font-size: 13px;
+      padding: 4px 8px;
+      background: #222;
+      color: #eee;
+      border: 1px solid #444;
+      border-radius: 3px;
+    }
+    button {
+      cursor: pointer;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: default;
+    }
+    #statusText {
+      font-size: 12px;
+      margin-left: auto;
+      color: #aaa;
+    }
+    main {
+      flex: 1;
+      overflow-y: auto;
+      //display: flex;
+      //justify-content: center;
+      //align-items: center;
+      background: #000;
+      //position: relative;
+      padding: 8px; /* optional, keeps cameras off the extreme edge */
+    }
+    video {
+      max-width: 100%;
+      max-height: 100%;
+      background: #000;
+    }
+    #statsOverlay {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      padding: 8px 10px;
+      background: rgba(0, 0, 0, 0.6);
+      color: #0f0;
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.4;
+      border-radius: 4px;
+      pointer-events: none;
+      min-width: 180px;
+    }
+    #sessionsError {
+      font-size: 12px;
+      color: #f66;
+      margin-left: 8px;
+    }
+
+.videos-row {
+  display: flex;
+  gap: 5px;
+  margin-top: 5px;
+}
+
+//.videos-row video {
+//  width:auto;
+//  background: black;
+//}
+
+
+#cameraContainer {
+  display: flex;
+ // flex-wrap: wrap;
+  flex-direction: column;
+  gap: 4px;
+ // align-items: flex-start;
+ // align-content: flex-start; /* <-- THIS removes the vertical gap */
+}
+
+.camera-block1 {
+  position:relative;
+  //width: 900px;   /* or whatever width fits your videos */
+  //border: 1px solid #444;
+  //padding: 10px;
+  //background: #222;
+  //color: #eee;
+  flex: 1 1 auto;
+  min-width: 900px; /* keeps your baseline layout */
+}
+
+
+.videos-row video {
+  background: black;
+  transition: width 0.15s ease-in-out;
+}
+
+.video-wrapper {
+  position: relative;
+}
+
+.ptz-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  pointer-events: none;
+}
+
+.ptz-overlay button,
+.ptz-overlay select {
+  pointer-events: auto;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: 1px solid #4da3ff;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.ptz-presets {
+  position: absolute;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+
+.ptz-arrows {
+  position: absolute;
+  top: 60%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+
+.ptz-arrows div {
+  display: flex;
+  gap: 20px;
+}
+
+.stats-overlay {
+  z-index: 50;
+  backdrop-filter: blur(3px);
+}
+
+.lens1-wrapper .ptz-overlay {
+  opacity: 0;
+  transition: opacity 0.25s ease-in-out;
+}
+
+.lens1-wrapper:hover .ptz-overlay {
+  opacity: 1;
+}
+
+
+.modal {
+  display: none;
+  position: fixed;
+  z-index: 1000;
+  left: 0; top: 0;
+  width: 100%; height: 100%;
+  background: rgba(0,0,0,0.6);
+}
+
+.modal-content {
+  background: #1e1e1e;
+  color: #eee;
+  margin: 10% auto;
+  padding: 20px;
+  border-radius: 8px;
+  width: 600px;
+  box-shadow: 0 0 20px rgba(0,0,0,0.5);
+}
+
+.close {
+  float: right;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.modal-body {
+  max-height: 400px;
+  overflow-y: auto;
+  font-family: monospace;
+}
+
+.modal-actions {
+  text-align: right;
+  margin-top: 10px;
+}
+
+.menu-overlay {
+  position: absolute;
+  top: 8px; right: 8px;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-size: 12px;
+}
+.menu-overlay:hover { background: rgba(0,0,0,0.8); }
+
+</style>
+</head>
+<body style="user-select: auto;">
+
+<header>
+  <h1>PPPP WebRTC Viewer</h1>
+  <span id="globalStatus">Idle</span>
+</header>
+
+<main id="cameraContainer">
+  <!-- JS will inject per-camera blocks here -->
+<div class="camera-block" data-ip="172.16.148.215">
+    <h2 class="camera-header">
+      <span class="arrow">▶</span>
+      Master Bedroom (172.16.148.215)
+    </h2>
+
+    <div class="camera-body" style="display: none; opacity: 0; height: 0; overflow: hidden; transition: all 0.25s ease;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled="">Connect</button>
+        <button class="disconnectBtn" disabled="">Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls="" width="650" autoplay="" playsinline="" muted=""></video>
+        <button class="menu-overlay">MENU</button></div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls="" width="650" autoplay="" playsinline="" muted="" poster="/images/172.16.148.215.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select"><option value="">Select preset</option><option value="33">test2</option><option value="35">test1</option></select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        <button class="menu-overlay">PTZ</button></div>
+      </div>
+    </div>
+  <div class="stats-overlay" style="position: absolute; top: 4px; left: 4px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); color: rgb(0, 255, 0); font: 12px monospace; white-space: pre; border-radius: 4px; pointer-events: none;">Waiting...</div></div><div class="camera-block" data-ip="172.16.148.216">
+    <h2 class="camera-header">
+      <span class="arrow">▶</span>
+      Garage (172.16.148.216)
+    </h2>
+
+    <div class="camera-body" style="display: none; opacity: 0; height: 0; overflow: hidden; transition: all 0.25s ease;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled="">Connect</button>
+        <button class="disconnectBtn" disabled="">Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls="" width="650" autoplay="" playsinline="" muted=""></video>
+        <button class="menu-overlay">MENU</button></div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls="" width="650" autoplay="" playsinline="" muted="" poster="/images/172.16.148.216.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select"><option value="">Select preset</option><option value="31">Street Fighter</option><option value="33">Ladder</option><option value="35">House Door</option><option value="37">Garage Door</option></select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        <button class="menu-overlay">PTZ</button></div>
+      </div>
+    </div>
+  <div class="stats-overlay" style="position: absolute; top: 4px; left: 4px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); color: rgb(0, 255, 0); font: 12px monospace; white-space: pre; border-radius: 4px; pointer-events: none;">Waiting...</div></div><div class="camera-block" data-ip="172.16.148.217">
+    <h2 class="camera-header">
+      <span class="arrow">▼</span>
+      Living room (172.16.148.217)
+    </h2>
+
+    <div class="camera-body" style="display: block; opacity: 1; height: auto; overflow: hidden; transition: 0.25s;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled="">Connect</button>
+        <button class="disconnectBtn" disabled="">Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls="" width="650" autoplay="" playsinline="" muted=""></video>
+        <button class="menu-overlay">MENU</button></div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls="" width="650" autoplay="" playsinline="" muted="" poster="/images/172.16.148.217.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select"><option value="">Select preset</option><option value="31">Dog food</option><option value="33">Dog Bed</option><option value="35">Chuggie Sofa</option><option value="37">Back Door</option><option value="39">Entry Way</option><option value="41">TV</option><option value="43">Massage</option><option value="45">Massage2</option><option value="47">Massage3</option><option value="49">Beatles</option><option value="51">Home</option></select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        <button class="menu-overlay">PTZ</button></div>
+      </div>
+    </div>
+  <div class="stats-overlay" style="position: absolute; top: 4px; left: 4px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); color: rgb(0, 255, 0); font: 12px monospace; white-space: pre; border-radius: 4px; pointer-events: none;">Waiting...</div></div><div class="camera-block" data-ip="172.16.148.218">
+    <h2 class="camera-header">
+      <span class="arrow">▶</span>
+      Back Yard (172.16.148.218)
+    </h2>
+
+    <div class="camera-body" style="display: none; opacity: 0; height: 0; overflow: hidden; transition: all 0.25s ease;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled="">Connect</button>
+        <button class="disconnectBtn" disabled="">Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls="" width="650" autoplay="" playsinline="" muted=""></video>
+        <button class="menu-overlay">MENU</button></div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls="" width="650" autoplay="" playsinline="" muted="" poster="/images/172.16.148.218.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select"><option value="">Select preset</option><option value="31">Left Yard</option><option value="33">Center</option><option value="35">Door</option><option value="37">To Shed</option><option value="39">Doggie door Exit</option><option value="41">Front Fence</option></select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        <button class="menu-overlay">PTZ</button></div>
+      </div>
+    </div>
+  <div class="stats-overlay" style="position: absolute; top: 4px; left: 4px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); color: rgb(0, 255, 0); font: 12px monospace; white-space: pre; border-radius: 4px; pointer-events: none;">Waiting...</div></div><div class="camera-block" data-ip="172.16.148.219">
+    <h2 class="camera-header">
+      <span class="arrow">▶</span>
+      Patio Cam (172.16.148.219)
+    </h2>
+
+    <div class="camera-body" style="display: none; opacity: 0; height: 0; overflow: hidden; transition: all 0.25s ease;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled="">Connect</button>
+        <button class="disconnectBtn" disabled="">Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls="" width="650" autoplay="" playsinline="" muted=""></video>
+        <button class="menu-overlay">MENU</button></div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls="" width="650" autoplay="" playsinline="" muted="" poster="/images/172.16.148.219.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select"><option value="">Select preset</option><option value="31">Back Door</option><option value="33">Normal</option></select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        <button class="menu-overlay">PTZ</button></div>
+      </div>
+    </div>
+  <div class="stats-overlay" style="position: absolute; top: 4px; left: 4px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); color: rgb(0, 255, 0); font: 12px monospace; white-space: pre; border-radius: 4px; pointer-events: none;">Waiting...</div></div><div class="camera-block" data-ip="172.16.148.222">
+    <h2 class="camera-header">
+      <span class="arrow">▶</span>
+      Garage Corner (172.16.148.222)
+    </h2>
+
+    <div class="camera-body" style="display: none; opacity: 0; height: 0; overflow: hidden; transition: all 0.25s ease;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled="">Connect</button>
+        <button class="disconnectBtn" disabled="">Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls="" width="650" autoplay="" playsinline="" muted=""></video>
+        <button class="menu-overlay">MENU</button></div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls="" width="650" autoplay="" playsinline="" muted="" poster="/images/172.16.148.222.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select"><option value="">Select preset</option><option value="31">Porch</option><option value="33">Gate Door</option><option value="35">Front Yard</option><option value="37">Neighbor Drive</option><option value="39">Driveway</option><option value="41">Pattiis Yard</option></select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        <button class="menu-overlay">PTZ</button></div>
+      </div>
+    </div>
+  <div class="stats-overlay" style="position: absolute; top: 4px; left: 4px; padding: 6px 8px; background: rgba(0, 0, 0, 0.55); color: rgb(0, 255, 0); font: 12px monospace; white-space: pre; border-radius: 4px; pointer-events: none;">Waiting...</div></div></main>
+
+
+<style>
+
+.modal-content {
+    position: absolute;
+    top: 100px;
+    left: 100px;
+}
+
+</style>
+
+
+<div id="sdModal" class="modal" style="display: block;">
+  <div class="modal-content">
+    <span id="sdClose" class="close">×</span>
+    <h2 id="sdTitle">SD Playback (172.16.148.217)</h2>
+
+    <div id="sdBody" class="modal-body">
+      <h3>Available Dates</h3>
+      <ul id="sdDateList"></ul>
+
+      <hr>
+
+      <h3>Files</h3>
+      <ul id="sdFileList"></ul>
+    </div>
+
+    <div class="modal-actions">
+      <button id="sdRefresh">Refresh</button>
+    </div>
+  </div>
+</div>
+
+
+<!-- Shared Lens 0 Camera Modal -->
+<div id="cameraModal" class="modal">
+  <div class="modal-content">
+    <span id="modalClose" class="close">×</span>
+    <h2 id="modalTitle">Camera Info</h2>
+    <div id="modalBody" class="modal-body">Loading...</div>
+    <div class="modal-actions">
+      <button id="modalRefresh">Refresh</button>
+    </div>
+  </div>
+</div>
+
+<!-- Shared Lens 1 Camera Modal -->
+<div id="ptzModal" class="modal" style="display:none;">
+  <div class="modal-content">
+    <span id="ptzClose" class="close">×</span>
+    <h2 id="ptzTitle" style="cursor:move;">PTZ Presets</h2>
+
+    <div id="ptzBody" class="modal-body">
+      <div>
+        <label>Presets:</label>
+        <select id="ptzSelect"></select>
+      </div>
+      <br>
+      <button id="ptzAddBtn">Add</button>
+      <button id="ptzUpdateBtn">Update</button>
+      <button id="ptzDeleteBtn">Delete</button>
+
+      <div id="ptzAddBox" style="display:none; margin-top:10px;">
+        <input id="ptzNewName" placeholder="New preset name">
+        <button id="ptzAddConfirm">Save</button>
+      </div>
+
+
+
+      <hr style="margin:15px 0;">
+
+      <h3 style="margin:5px 0;">Move %</h3>
+
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+        <label for="ptzXPercent" style="width:40px;">X:</label>
+        <input id="ptzXPercent" type="number" min="0" max="100" value="50" style="width:70px; padding:4px;">
+      </div>
+
+      <div style="display:flex; gap:10px; align-items:center; margin-bottom:10px;">
+        <label for="ptzYPercent" style="width:40px;">Y:</label>
+        <input id="ptzYPercent" type="number" min="0" max="100" value="50" style="width:70px; padding:4px;">
+      </div>
+
+      <button id="ptzMoveBtn" style="margin-top:5px;">Move</button>
+
+
+
+
+    </div>
+  </div>
+</div>
+
+
+<script>
+function makeDraggable(modal, handle) {
+    let offsetX = 0, offsetY = 0;
+    let isDown = false;
+
+    handle.addEventListener("mousedown", (e) => {
+        isDown = true;
+        offsetX = e.clientX - modal.offsetLeft;
+        offsetY = e.clientY - modal.offsetTop;
+        document.body.style.userSelect = "none";
+    });
+
+    document.addEventListener("mouseup", () => {
+        isDown = false;
+        document.body.style.userSelect = "auto";
+    });
+
+    document.addEventListener("mousemove", (e) => {
+        if (!isDown) return;
+        modal.style.left = (e.clientX - offsetX) + "px";
+        modal.style.top  = (e.clientY - offsetY) + "px";
+    });
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+    const modal = document.querySelector("#ptzModal .modal-content");
+    const handle = document.getElementById("ptzTitle");
+    makeDraggable(modal, handle);
+});
+</script>
+
+
+
+<script>
+
+  const SERVER = '172.16.147.108:8080';
+
+const CAMERAS = [
+{"ip": "172.16.148.215", "des": "Master Bedroom", "password": "c05f7e3a4479012"},
+{"ip": "172.16.148.216", "des": "Garage", "password": "marshall2"},
+{"ip": "172.16.148.217", "des": "Living room", "password": "d65b7e4919fc01c"},
+{"ip": "172.16.148.218", "des": "Back Yard", "password": "c92a36b81644be"},
+{"ip": "172.16.148.219", "des": "Patio Cam", "password": "marshall3"},
+{"ip": "172.16.148.222", "des": "Garage Corner", "password": "4c1d6c5d1a0984"},
+];
+//const WS_BASE = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':8888/ws';
+const WS_BASE = "ws://172.16.147.108:8888/ws";
+
+const cameraContainer = document.getElementById('cameraContainer');
+const globalStatus = document.getElementById('globalStatus');
+
+function setGlobalStatus(text) {
+  globalStatus.textContent = text;
+}
+
+
+
+function createCameraUI(cam, index) {
+  const wrapper = document.createElement('div');
+  wrapper.className = 'camera-block';
+  wrapper.dataset.ip = cam.ip;
+
+  wrapper.innerHTML = `
+    <h2 class="camera-header">
+      <span class="arrow">▶</span>
+      ${cam.des} (${cam.ip})
+    </h2>
+
+    <div class="camera-body" style="display: none; opacity: 0; height: 0; overflow: hidden; transition: all 0.25s ease;">
+      <div class="controls">
+        <button class="startBtn">Start Camera</button>
+        <button class="connectBtn" disabled>Connect</button>
+        <button class="disconnectBtn" disabled>Disconnect</button>
+        <button class="lightBtn">Light On</button>
+        <button class="rezBtn">Hi-Rez</button>
+        <button class="zoomOutBtn">Zoom -</button>
+        <button class="zoomInBtn">Zoom +</button>
+
+        <button class="sdBtn">SD Playback</button>
+        <label>Offset:</label>
+        <input class="sdOffset" type="number" value="0" min="0" style="width:70px;">
+
+        <span class="statusText">Idle</span>
+      </div>
+
+      <div class="videos-row">
+        <div class="video-wrapper lens0-wrapper">
+          <video class="video0" controls width="650" autoplay playsinline muted></video>
+        </div>
+
+        <div class="video-wrapper lens1-wrapper">
+          <video class="video1" controls width="650" autoplay playsinline muted poster="/images/${cam.ip}.png"></video>
+        <div class="ptz-overlay" style="display:none;">
+          <div class="ptz-presets">
+            <select class="ptz-select">
+              <option value="">Select preset</option>
+            </select>
+          </div>
+
+          <div class="ptz-arrows">
+            <button data-dir="down">▲</button>
+            <div>
+              <button data-dir="left">◀</button>
+              <button data-dir="right">▶</button>
+            </div>
+            <button data-dir="up">▼</button>
+          </div>
+        </div>
+        </div>
+      </div>
+    </div>
+  `;
+
+  // --- MENU overlay on lens 0 ---
+  const lens0Wrapper = wrapper.querySelector('.lens0-wrapper');
+  const menuBtn = document.createElement('button');
+  menuBtn.textContent = 'MENU';
+  menuBtn.className = 'menu-overlay';
+  menuBtn.onclick = () => openCameraModal(cam);
+  lens0Wrapper.appendChild(menuBtn);
+
+  // --- PTZ overlay button on lens 1 ---
+  const lens1Wrapper = wrapper.querySelector('.lens1-wrapper');
+  const ptzBtn = document.createElement('button');
+  ptzBtn.textContent = 'PTZ';
+  ptzBtn.className = 'menu-overlay';
+  ptzBtn.onclick = () => openPTZModal(cam, wrapper);
+  lens1Wrapper.appendChild(ptzBtn);
+
+
+  // --- Hide/unhide toggle with animation + arrow ---
+  const header = wrapper.querySelector('.camera-header');
+  const body = wrapper.querySelector('.camera-body');
+  const arrow = wrapper.querySelector('.arrow');
+
+  header.addEventListener('click', () => {
+    const isHidden = body.style.display === 'none';
+
+    if (isHidden) {
+      // EXPAND
+      body.style.display = 'block';
+      body.style.opacity = '1';
+
+      // First set height to scrollHeight
+      body.style.height = body.scrollHeight + 'px';
+
+      // After animation, unlock height
+      setTimeout(() => {
+        body.style.height = 'auto';
+      }, 250);
+
+      arrow.textContent = '▼';
+
+    } else {
+      // COLLAPSE
+      // Lock current height before collapsing
+      body.style.height = body.scrollHeight + 'px';
+
+      setTimeout(() => {
+        body.style.height = '0';
+        body.style.opacity = '0';
+      }, 10);
+
+      setTimeout(() => {
+        body.style.display = 'none';
+      }, 250);
+
+      arrow.textContent = '▶';
+    }
+  });
+
+  cameraContainer.appendChild(wrapper);
+  return wrapper;
+}
+
+
+
+class CameraManager {
+    constructor(cam, rootEl) {
+        this.cam = cam;
+        this.rootEl = rootEl;
+
+        this.startBtn = rootEl.querySelector('.startBtn');
+        this.connectBtn = rootEl.querySelector('.connectBtn');
+        this.disconnectBtn = rootEl.querySelector('.disconnectBtn');
+        this.statusText = rootEl.querySelector('.statusText');
+        this.video0 = rootEl.querySelector('.video0');
+        this.video1 = rootEl.querySelector('.video1');
+
+        this.zoom = 1.0; // default scale
+        this.zoomInBtn = rootEl.querySelector('.zoomInBtn');
+        this.zoomInBtn.addEventListener('click', () => this.zoomIn());
+        this.zoomOutBtn = rootEl.querySelector('.zoomOutBtn');
+        this.zoomOutBtn.addEventListener('click', () => this.zoomOut());
+
+        this.sessionId = null;
+        this.pc = {
+            0: null,
+            1: null
+        };
+        this.ws = {
+            0: null,
+            1: null
+        };
+
+        this.startBtn.addEventListener('click', () => this.startCamera());
+        this.connectBtn.addEventListener('click', () => this.connectBoth());
+        this.disconnectBtn.addEventListener('click', () => this.disconnectBoth());
+
+        this.rezBtn = rootEl.querySelector('.rezBtn');
+        this.isHighRez = false; // default to low rez (substream=4)
+        this.rezBtn.addEventListener('click', () => this.toggleRez());
+
+        this.lightBtn = rootEl.querySelector('.lightBtn');
+        this.isLightOn = false; // default state
+        this.lightBtn.addEventListener('click', () => this.toggleLight());
+
+        this.ptzOverlay = rootEl.querySelector('.ptz-overlay');
+        this.ptzSelect = rootEl.querySelector('.ptz-select');
+        this.ptzButtons = rootEl.querySelectorAll('.ptz-arrows button');
+        this.ptzSelect.addEventListener('change', () => this.sendPreset());
+        this.ptzButtons.forEach(btn => {
+            btn.addEventListener('mousedown', (e) => this.startPTZ(e.target.dataset.dir));
+            btn.addEventListener('mouseup',   ()  => this.stopPTZ());
+           // btn.addEventListener('mouseleave',()  => this.stopPTZ());
+        });
+
+        // Show overlay only after connect
+
+        this.setStatus('Idle');
+        // --- Stats Overlay ---
+        this.statsOverlay = document.createElement('div');
+        this.statsOverlay.className = 'stats-overlay';
+        this.statsOverlay.style.position = 'absolute';
+        this.statsOverlay.style.top = '4px';
+        this.statsOverlay.style.left = '4px';
+        this.statsOverlay.style.padding = '6px 8px';
+        this.statsOverlay.style.background = 'rgba(0,0,0,0.55)';
+        this.statsOverlay.style.color = '#0f0';
+        this.statsOverlay.style.font = '12px monospace';
+        this.statsOverlay.style.whiteSpace = 'pre';
+        this.statsOverlay.style.borderRadius = '4px';
+        this.statsOverlay.style.pointerEvents = 'none';
+        this.statsOverlay.textContent = 'Waiting...';
+
+        this.pendingRemoteCandidates = this.pendingRemoteCandidates || {};
+
+        this.sdBtn = rootEl.querySelector('.sdBtn');
+        this.sdOffset = rootEl.querySelector('.sdOffset');
+        this.sdBtn.addEventListener('click', () => openSDModal(this));
+
+        this.rootEl.appendChild(this.statsOverlay);
+
+        this._lastBytes = 0;
+        this._lastTime = performance.now();
+        this.statsTimer = null;
+        this.loadPTZPresets(cam, rootEl);
+        this.video0.addEventListener('loadedmetadata', () => {
+            this._videoReady = true;
+        });
+
+
+    }
+
+    setStatus(text) {
+        this.statusText.textContent = text;
+    }
+
+    startHeartbeat(lens, ws) {
+        if (!this.heartbeat) this.heartbeat = {};
+
+        // Clear old timer if reconnecting
+        if (this.heartbeat[lens]) {
+            clearInterval(this.heartbeat[lens].timer);
+        }
+
+        this.heartbeat[lens] = {
+            lastPong: Date.now(),
+            timer: setInterval(() => {
+                // Send ping
+                ws.send(JSON.stringify({ type: "ping", lens }));
+
+                // Check timeout
+                if (Date.now() - this.heartbeat[lens].lastPong > 50000) {
+                    console.warn("💀 HEARTBEAT TIMEOUT for lens", lens);
+
+                    clearInterval(this.heartbeat[lens].timer);
+
+                    // Kill WS + PC cleanly
+                    try { ws.close(); } catch {}
+                    if (this.pc[lens]) {
+                        this.pc[lens].close();
+                        this.pc[lens] = null;
+                    }
+
+                    // Trigger your reconnect logic
+                    //this.restartLens(lens);
+                    console.warn("Heartbeat timeout — would restart lens", lens);
+                }
+            }, 20000)
+        };
+    }
+
+
+
+  async loadPTZPresets(cam, wrapper) {
+    try {
+      const params = new URLSearchParams();
+      params.append("action", "getPTZ");
+      params.append("ip", cam.ip);
+
+      const res = await fetch("/cgi-bin/API.cgi", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: params.toString()
+      });
+
+      const presets = await res.json();
+
+      const select = wrapper.querySelector(".ptz-select");
+      select.innerHTML = `<option value="">Select preset</option>`;
+
+      presets.forEach(p => {
+        const opt = document.createElement("option");
+        opt.value = p.slot;
+        opt.textContent = p.text;
+        select.appendChild(opt);
+      });
+
+    } catch (err) {
+      console.error("Failed to load PTZ presets for", cam.ip, err);
+    }
+  }
+
+
+
+    async updateStats() {
+
+        if (!this._videoReady) {
+            this.statsOverlay.textContent = "Waiting for video...";
+            return;
+        }
+
+        const pc = this.pc[0]; // lens 0 only
+        if (!pc) return;
+
+        const receivers = pc.getReceivers();
+        if (!receivers.length) return;
+
+        const stats = await receivers[0].getStats();
+
+        let fps = 0;
+        let bytes = 0;
+        let width = 0;
+        let height = 0;
+        let decoder = '';
+        let freezeCount = 0;
+
+        stats.forEach(report => {
+            if (report.type === 'inbound-rtp' && report.kind === 'video') {
+                fps = report.framesPerSecond || 0;
+                bytes = report.bytesReceived || 0;
+                freezeCount = report.freezeCount || 0;
+            }
+            if (report.type === 'track') {
+                width = report.frameWidth || 0;
+                height = report.frameHeight || 0;
+                decoder = report.decoderImplementation || '';
+            }
+        });
+
+
+        // If width/height still 0, try again later
+        if (width === 0 || height === 0) {
+            this.statsOverlay.textContent = "Waiting for resolution...";
+            //return;
+        }
+
+        // bitrate calculation
+        const now = performance.now();
+        const dt = (now - this._lastTime) / 1000;
+        const diff = bytes - this._lastBytes;
+        const kbps = dt > 0 ? ((diff * 8) / dt / 1000).toFixed(0) : 0;
+
+        this._lastBytes = bytes;
+        this._lastTime = now;
+
+        this.statsOverlay.textContent =
+            `FPS: ${fps}\n` +
+            `Bitrate: ${kbps} kbps\n` +
+            `Res: ${width}x${height}\n` +
+            `Decoder: ${decoder}\n` +
+            `Freezes: ${freezeCount}`;
+    }
+
+    async startCamera() {
+        this.setStatus('Starting camera...');
+        setGlobalStatus(`Starting ${this.cam.des}...`);
+
+        try {
+
+            const params = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "add"
+            });
+
+            const addRes = await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: params.toString()
+            });
+
+            if (!addRes.ok) throw new Error('add_session failed: ' + addRes.status);
+
+            const addJson = await addRes.json();
+            if (!addJson.session) throw new Error('No session returned from /add');
+
+            this.sessionId = addJson.session; // <-- THE FIX
+
+
+            // 2) Start DRW livestream
+            const ssparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "start_stream"
+            });
+
+            const drwRes = await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: ssparams.toString()
+            });
+
+
+            if (!drwRes.ok) throw new Error('DRW failed: ' + drwRes.status);
+
+            this.setStatus(`Camera ready (session=${this.sessionId})`);
+            console.log(`🆔 SESSION CREATED | cam=${this.cam.ip} session=${this.sessionId}`);
+
+            this.connectBtn.disabled = false;
+            this.startBtn.disabled = true;
+        } catch (e) {
+            console.error('startCamera error:', e);
+            this.setStatus('Error: ' + e.message);
+            setGlobalStatus('Error starting camera');
+        }
+    }
+
+    zoomIn() {
+        this.zoom = Math.min(this.zoom + 0.1, 3.0); // max 3x
+        this.applyZoom();
+    }
+
+    zoomOut() {
+        this.zoom = Math.max(this.zoom - 0.1, 0.3); // min 0.3x
+        this.applyZoom();
+    }
+
+    applyZoom() {
+        const baseWidth = 500; // matches your CSS width
+        const newWidth = baseWidth * this.zoom;
+
+        //this.video0.style.width = `${newWidth}px`;
+        //this.video1.style.width = `${newWidth}px`;
+        this.video0.style.setProperty("width", `${newWidth}px`, "important");
+        this.video1.style.setProperty("width", `${newWidth}px`, "important");
+    }
+
+
+    async connectBoth() {
+        if (!this.sessionId) {
+            alert('Camera not started yet');
+            return;
+        }
+        this.connectBtn.disabled = true;
+        this.disconnectBtn.disabled = false;
+        this.setStatus('Connecting both lenses...');
+
+        await Promise.all([
+            this.connectLens(0, this.video0),
+            this.connectLens(1, this.video1),
+        ]);
+
+        this.setStatus('Connected (both lenses)');
+        console.log(`✅ BOTH LENSES CONNECTED | cam=${this.cam.ip}`);
+        if (!this.statsTimer) {
+            this.statsTimer = setInterval(() => this.updateStats(), 1500);
+        }
+        this.ptzOverlay.style.display = "block";
+        this.startBtn.disabled = true;
+    }
+
+    async connectLens(lens, videoEl) {
+        // Close any existing
+        if (this.ws[lens]) {
+            try {
+                this.ws[lens].close();
+            } catch {}
+            this.ws[lens] = null;
+        }
+        if (this.pc[lens]) {
+            try {
+                this.pc[lens].close();
+            } catch {}
+            this.pc[lens] = null;
+        }
+
+      //  const wsUrl = WS_BASE + "?session_id=" + encodeURIComponent(this.sessionId) + "&lens=" + lens;
+
+
+    const res = await fetch(`/cgi-bin/getSignaling.cgi?type=local`);
+
+    const data = await res.json();
+    console.log(data.signalingServer);    
+
+    // REMOTE
+    const wsUrl = data.signalingServer + "&session_id=" + encodeURIComponent(this.sessionId) + "&lens=" + lens;
+
+    // LOCAL
+    //const wsUrl = WS_BASE + "?session_id=" + encodeURIComponent(this.sessionId) + "&lens=" + lens;
+
+    //const wsUrl = data.signalingServer + "&session_id=${encodeURIComponent(sessionID)}&lens=${encodeURIComponent(lens)}";
+
+        console.log(wsUrl);
+        const ws = new WebSocket(wsUrl);
+        this.ws[lens] = ws;
+
+        ws.onopen = () => {
+            ws.send(JSON.stringify({ type: "ready" }));
+            this.startHeartbeat(lens, ws);
+            const ts = new Date().toISOString().replace('T', ' ').replace('Z', '');
+            console.log(`WS lens ${lens} open:`, wsUrl);
+            console.log(`📡 ${ts} WS OPEN | cam=${this.cam.ip} lens=${lens}`);
+
+        };
+
+        ws.onclose = () => {
+            const ts = new Date().toISOString().replace('T', ' ').replace('Z', '');
+            //console.log(`WS lens ${lens} closed`);
+            console.log(`❌ ${ts} WS CLOSE | cam=${this.cam.ip} lens=${lens}`);
+            if (this.pc[lens]) {
+                this.pc[lens].close();
+                this.pc[lens] = null;
+            }
+            //UPdate:  if (!this.ws[0] && !this.ws[1]) {
+            if (!this.ws[0] && !this.ws[1] && this.sessionId) {
+                console.log(`🔌 ALL WS CLOSED for cam=${this.cam.ip}`);
+                this.disconnectBtn.disabled = true;
+                // debug
+                this.connectBtn.disabled = true;
+
+                this.startBtn.disabled = false;
+                this.setStatus('Disconnected');
+            }
+        };
+
+        ws.onerror = (err) => {
+            console.error(`WS lens  error:`, err);
+            console.log(`⚠️ WS ERROR | cam=${this.cam.ip} lens=${lens}`, err);
+        };
+
+        ws.onmessage = async (event) => {
+
+            console.log("WS RX RAW lens", lens, ":", event.data);
+            const msg = JSON.parse(event.data);
+            console.log("WS RX PARSED lens", lens, ":", msg);
+
+            if (msg.type === "pong") {
+                if (this.heartbeat && this.heartbeat[lens]) {
+                    this.heartbeat[lens].lastPong = Date.now();
+                }
+                return;
+            }
+
+            if (msg.type === "offer") {
+                await this.handleOfferForLens(lens, msg, videoEl, ws);
+                return;
+            }
+
+            if (msg.type === "candidate") {
+                await this.handleRemoteCandidateForLens(lens, msg);
+                return;
+            }
+        };
+
+    }
+
+
+
+    async handleOfferForLens(lens, msg, videoEl, ws) {
+        if (!this.pendingRemoteCandidates) this.pendingRemoteCandidates = {};
+
+        let pc = this.pc[lens];
+        if (!pc) {
+            pc = new RTCPeerConnection({
+                iceTransportPolicy: "all",
+                iceServers: [{
+                        urls: [
+                            "turn:my_server.com:3478?transport=udp",
+                            "turn:my_server.com:3478?transport=tcp",
+                        ],
+                        username: "webrtcuser",
+                        credential: "webrtcpass",
+                    },
+                    {
+                        urls: ["stun:stun.l.google.com:19302"]
+                    },
+                ],
+            });
+            this.pc[lens] = pc;
+
+            pc.ontrack = (ev) => {
+                console.log("🎬 TRACK START lens", lens);
+                videoEl.srcObject = ev.streams[0];
+            };
+
+            pc.onicecandidate = (ev) => {
+                console.log("🧊 BROWSER onicecandidate lens", lens, "→", ev.candidate);
+                if (ev.candidate) {
+                    ws.send(JSON.stringify({
+                        type: "candidate",
+                        candidate: ev.candidate
+                    }));
+                }
+            };
+
+            pc.oniceconnectionstatechange = () => {
+              console.log(`?? ICE state lens ${lens}:`, pc.iceConnectionState);
+             };
+            pc.onconnectionstatechange = () => {
+              console.log(`?? Conn state lens ${lens}:`, pc.connectionState);
+            };
+
+
+            pc.onicegatheringstatechange = () => {
+                console.log("🧊 GATHERING STATE lens", lens, "→", pc.iceGatheringState);
+            };
+        }
+
+        const offerInit = msg.offer || msg;
+        await pc.setRemoteDescription(offerInit);
+
+        const pending = this.pendingRemoteCandidates[lens] || [];
+        for (const c of pending) {
+            try {
+                await pc.addIceCandidate(c);
+            } catch (e) {
+                console.log("flush addIceCandidate lens", lens, "error:", e);
+            }
+        }
+        this.pendingRemoteCandidates[lens] = [];
+
+        const answer = await pc.createAnswer();
+        await pc.setLocalDescription(answer);
+
+        ws.send(JSON.stringify({
+            type: "answer",
+            sdp: answer.sdp, // 🔥 flat
+            // type: answer.type, // optional
+        }));
+
+
+    }
+
+
+
+
+    async handleRemoteCandidateForLens(lens, msg) {
+        const pc = this.pc[lens];
+        if (!pc) return;
+
+        if (!this.pendingRemoteCandidates) this.pendingRemoteCandidates = {};
+        const cand = new RTCIceCandidate(msg.candidate);
+
+        if (!pc.remoteDescription) {
+            this.pendingRemoteCandidates[lens] =
+                this.pendingRemoteCandidates[lens] || [];
+            this.pendingRemoteCandidates[lens].push(cand);
+            return;
+        }
+
+        try {
+            await pc.addIceCandidate(cand);
+        } catch (e) {
+            console.log("addIceCandidate lens", lens, "error:", e);
+        }
+    }
+
+
+
+    async disconnectBoth() {
+        // Close WebRTC first
+        console.log(`🔻 DISCONNECT REQUEST | cam=${this.cam.ip}`);
+        [0, 1].forEach(lens => {
+            if (this.ws[lens]) {
+                try {
+                    this.ws[lens].close();
+                } catch {}
+                this.ws[lens] = null;
+            }
+            if (this.pc[lens]) {
+                try {
+                    this.pc[lens].close();
+                } catch {}
+                this.pc[lens] = null;
+            }
+        });
+
+        this.video0.srcObject = null;
+        this.video1.srcObject = null;
+
+        // Stop camera stream (streamid=16 stops livestream)
+        try {
+
+
+            // 2) Start DRW livestream
+            const stpparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "stop_stream"
+            });
+
+            await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: stpparams.toString()
+                //       }),
+            });
+        } catch (e) {
+            console.warn('stop_stream error:', e);
+        }
+        console.log(`🛑 STREAM STOP SENT | cam=${this.cam.ip}`);
+
+
+        try {
+            // Disconnect DRW session
+            const disparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "disconnect"
+            });
+
+            await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: disparams.toString()
+            });
+        } catch (e) {
+            console.warn('disconnect error:', e);
+        }
+
+
+        console.log(`📴 DRW SESSION CLOSED | cam=${this.cam.ip}`);
+
+        if (this.statsTimer) {
+            clearInterval(this.statsTimer);
+            this.statsTimer = null;
+        }
+        this.statsOverlay.textContent = 'Idle';
+
+
+        this.ptzOverlay.style.display = "none";
+        this.setStatus('Disconnected');
+        this.connectBtn.disabled = true;
+        this.disconnectBtn.disabled = true;
+        this.startBtn.disabled = false;
+        this.rezBtn.textContent = "Hi-Rez"
+    }
+
+
+    async toggleRez() {
+        if (!this.sessionId) {
+            this.setStatus("Start camera first");
+            return;
+        }
+
+        // Determine which command to send
+        const substream = this.isHighRez ? 4 : 2;
+        const label = this.isHighRez ? "Hi-Rez" : "Low-Rez";
+
+
+        try {
+            const rezparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "ch_rez",
+                rez: substream
+            });
+
+            await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: rezparams.toString()
+            });
+
+            this.setStatus(`Switching to ...`);
+
+
+            // Toggle state
+            this.isHighRez = !this.isHighRez;
+
+            // Update button label
+            this.rezBtn.textContent = this.isHighRez ? "Low-Rez" : "Hi-Rez";
+
+            this.setStatus(` active`);
+
+        } catch (e) {
+            console.error("toggleRez error:", e);
+            this.setStatus("Rez switch failed");
+        }
+    }
+
+
+    async toggleLight() {
+        if (!this.sessionId) {
+            this.setStatus("Start camera first");
+            return;
+        }
+
+        // Determine which command to send
+        const lightValue = this.isLightOn ? 0 : 1;
+        const label = this.isLightOn ? "Light On" : "Light Off";
+
+        this.setStatus(`Switching ...`);
+
+        try {
+            const rezparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "light",
+                rez: lightValue
+            });
+
+            await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: rezparams.toString()
+            });
+
+
+            // Toggle state
+            this.isLightOn = !this.isLightOn;
+
+            // Update button label
+            this.lightBtn.textContent = this.isLightOn ? "Light Off" : "Light On";
+
+            this.setStatus(` active`);
+
+        } catch (e) {
+            console.error("toggleLight error:", e);
+            this.setStatus("Light toggle failed");
+        }
+    }
+
+    async sendPTZ(dir) {
+        if (!this.sessionId) return;
+
+        const map = {
+            up: 2,
+            down: 0,
+            left: 4,
+            right: 6
+        };
+
+        const direction = map[dir];
+        if (direction === undefined) return;
+
+        try {
+            const ptzparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "ptz",
+                rez: direction
+            });
+
+            await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: ptzparams.toString()
+            });
+        } catch (e) {
+            console.error("PTZ error:", e);
+        }
+
+
+        //  Wait 500ms
+        await new Promise(resolve => setTimeout(resolve, 300));
+
+        try {
+            await fetch(`http://172.16.147.108:8080/DRW`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    ip: this.cam.ip,
+                    command: cmd,
+                    clear: true,
+                    output: 'text',
+                }),
+            });
+            this.setStatus(`PTZ ${dir}`);
+        } catch (e) {
+            console.error("PTZ error:", e);
+        }
+
+
+    }
+
+
+    startPTZ(dir) {
+        if (!this.sessionId) return;
+
+        const map = {
+            up: 2,
+            down: 0,
+            left: 4,
+            right: 6
+        };
+
+        const direction = map[dir];
+        if (direction === undefined) return;
+
+        const params = new URLSearchParams({
+            ip: this.cam.ip,
+            action: "ptz",
+            rez: direction
+        });
+
+        fetch('/cgi-bin/API.cgi', {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: params.toString()
+        });
+    }
+
+
+    stopPTZ() {
+        if (!this.sessionId) return;
+
+        const params = new URLSearchParams({
+            ip: this.cam.ip,
+            action: "ptz",
+            rez: 5   // STOP command
+        });
+
+        fetch('/cgi-bin/API.cgi', {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: params.toString()
+        });
+
+        // Send stop twice (same as your old page)
+        setTimeout(() => {
+            fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
+                body: params.toString()
+            });
+        }, 10);
+    }
+
+
+
+
+
+    async sendPreset() {
+        const preset = this.ptzSelect.value;
+        if (!preset) return;
+
+        try {
+            const preparams = new URLSearchParams({
+                ip: this.cam.ip,
+                action: "preset",
+                rez: preset
+            });
+
+            await fetch('/cgi-bin/API.cgi', {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: preparams.toString()
+            });
+        } catch (e) {
+            console.error("Preset error:", e);
+        }
+        this.setStatus(`Preset ${preset}`);
+    }
+}
+
+
+
+// --- Lens 1 PTZ Modal Elements ---
+const ptzModal = document.getElementById('ptzModal');
+const ptzClose = document.getElementById('ptzClose');
+const ptzTitle = document.getElementById('ptzTitle');
+const ptzBody = document.getElementById('ptzBody');
+const ptzSelect = document.getElementById('ptzSelect');
+
+const ptzAddBtn = document.getElementById('ptzAddBtn');
+const ptzUpdateBtn = document.getElementById('ptzUpdateBtn');
+const ptzDeleteBtn = document.getElementById('ptzDeleteBtn');
+
+const ptzAddBox = document.getElementById('ptzAddBox');
+const ptzNewName = document.getElementById('ptzNewName');
+const ptzAddConfirm = document.getElementById('ptzAddConfirm');
+
+ptzClose.onclick = () => ptzModal.style.display = 'none';
+window.onclick = (e) => { if (e.target === ptzModal) ptzModal.style.display = 'none'; };
+
+let PTZ_CAM = null;
+let PTZ_WRAPPER = null;
+
+// --- Open PTZ Modal ---
+function openPTZModal(cam, wrapper) {
+  PTZ_CAM = cam;
+  PTZ_WRAPPER = wrapper;
+
+  ptzTitle.textContent = `PTZ Presets (${cam.ip})`;
+
+  // Copy presets from lens1 select
+  const src = wrapper.querySelector('.ptz-select');
+  ptzSelect.innerHTML = src.innerHTML;
+
+  ptzModal.style.display = 'block';
+}
+
+const sdModal = document.getElementById('sdModal');
+const SDClose = document.getElementById('sdClose');
+SDClose.onclick = () => sdModal.style.display = 'none';
+
+async function openSDModal(mgr) {
+  SD_MGR = mgr;
+  SD_CAM = mgr.cam;
+
+  sdTitle.textContent = `SD Playback (${SD_CAM.ip})`;
+  sdModal.style.display = 'block';
+
+  const dates = await fetchSDDates(SD_CAM);
+  renderDateList(dates);
+}
+
+
+
+// Shared Len 0 MENU modal elements
+const cameraModal = document.getElementById('cameraModal');
+const modalTitle = document.getElementById('modalTitle');
+const modalBody = document.getElementById('modalBody');
+const modalClose = document.getElementById('modalClose');
+const modalRefresh = document.getElementById('modalRefresh');
+
+modalClose.onclick = () => cameraModal.style.display = 'none';
+window.onclick = (e) => { if (e.target === cameraModal) cameraModal.style.display = 'none'; };
+
+async function openCameraModal(cam) {
+  modalTitle.textContent = `${cam.des} (${cam.ip})`;
+  modalBody.textContent = 'Loading...';
+  cameraModal.style.display = 'block';
+  await fetchCameraData(cam);
+}
+
+modalRefresh.onclick = async () => {
+  const ip = modalTitle.textContent.match(/\((.*?)\)/)[1];
+  const cam = CAMERAS.find(c => c.ip === ip);
+  await fetchCameraData(cam);
+};
+
+async function fetchCameraData(cam) {
+  const commands = [
+    "get_status.cgi",
+    "get_params.cgi",
+    "get_camera_params.cgi",
+    "trans_cmd_string.cgi?cmd=2109&command=2&",
+    "trans_cmd_string.cgi?cmd=2125&command=1&"
+  ];
+
+  const results = [];
+
+  for (const cmd of commands) {
+    try {
+      const encoded = btoa(cmd);
+
+      const params = new URLSearchParams();
+      params.append("action", "CMD");
+      params.append("ip", cam.ip);
+      params.append("session", cam.sessionId);
+      params.append("command", encoded);
+
+      const res = await fetch("/cgi-bin/API.cgi", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: params.toString()
+      });
+
+      const text = await res.text();
+      results.push(text);
+
+    } catch (e) {
+      results.push(`Error fetching ${cmd}: ${e}`);
+    }
+  }
+
+  // --- Parse "var key=value" ---
+  const vars = results
+    .join(";")
+    .split(";")
+    .filter(v => v.trim().startsWith("var "));
+
+  const parsedVars = {};
+
+  vars.forEach(line => {
+    // Example line: var wifi_ssid="{mySid}";
+    let cleaned = line.trim();
+
+    // Remove leading "var " and trailing semicolon
+    cleaned = cleaned.replace(/^var\s+/, "").replace(/;$/, "");
+
+    // Split ONLY on the first "="
+    const eqIndex = cleaned.indexOf("=");
+    if (eqIndex === -1) return;
+
+    const key = cleaned.substring(0, eqIndex).trim();
+    let val = cleaned.substring(eqIndex + 1).trim();
+
+    // Remove surrounding quotes if present
+    val = val.replace(/^"(.*)"$/, "$1");
+
+    parsedVars[key] = val;
+  });
+
+  // --- Build modal UI ---
+  modalBody.innerHTML = `
+    <div class="modal-section">
+      <h3>Camera Info</h3>
+      <div><strong>Time:</strong> ${new Date(parsedVars.now * 1000).toLocaleString()}</div>
+      <div><strong>Firmware:</strong> ${parsedVars.sys_ver}</div>
+      <div><strong>Battery:</strong> ${parsedVars.batteryRate}%</div>
+      <div><strong>WiFi SSID:</strong> ${parsedVars.wifi_ssid}</div>
+    </div>
+
+    <hr>
+
+    <div class="modal-row">
+      <div class="label">OSD:</div>
+      <div class="value">Current: ${parsedVars.osdenable == "1" ? "On" : "Off"}
+      <button id="osdOn">Turn On</button>
+      <button id="osdOff">Turn Off</button></div>
+    </div>
+    <br>
+
+    <div class="modal-row">
+      <div class="label">Night Vision:</div>
+      <div class="value">Current: ${parsedVars.sirenStatus == "1" ? "On" : "Off"}
+      <button id="starlight">Starlight</button>
+      <button id="bw">B & W</button></div>
+    </div>
+
+
+    <div class="modal-row">
+      <div class="label">Motion Alarm:</div>
+      <div class="value">Current: ${parsedVars.alarm_motion_armed == "1" ? "On" : "Off"}
+      <button id="motionOn">Turn On</button>
+      <button id="motionOff">Turn Off</button></div>
+    </div>
+    <br>
+    <div class="modal-row">
+      <div class="label">Siren:</div>
+      <div class="value">Current: ${parsedVars.sirenStatus == "1" ? "On" : "Off"}
+      <button id="sirenOn">Turn On</button>
+      <button id="sirenOff">Turn Off</button></div>
+    </div>
+    <br>
+    <div class="modal-row">
+      <div class="label">Light:</div>
+      <div class="value">Current: ${parsedVars.lightStatus == "1" ? "On" : "Off"}
+      <button id="lightOn">Turn On</button>
+      <button id="lightOff">Turn Off</button></div>
+    </div>
+    <br>
+    <div class="modal-row">
+      <div class="label">LED:</div>
+      <div class="value">Current: ${parsedVars.LEDStatus == "0" ? "On" : "Off"}
+      <button id="ledOn">Turn On</button>
+      <button id="ledOff">Turn Off</button></div>
+    </div>
+    <div class="modal-row">
+      <div class="label">Flip:</div>
+      <div class="value">Current: ${parsedVars.flip}
+      <button id="flip0"> 0 </button>
+      <button id="flip1"> 1 </button>
+      <button id="flip2"> 2 </button>
+      <button id="flip3"> 3 </button>
+    </div>
+
+  `;
+
+  // --- Wire up control buttons ---
+  document.getElementById("flip0").onclick = () =>
+    sendCamCmd(cam, "camera_control.cgi?param=5&value=0");
+
+  document.getElementById("flip1").onclick = () =>
+    sendCamCmd(cam, "camera_control.cgi?param=5&value=1");
+
+  document.getElementById("flip2").onclick = () =>
+    sendCamCmd(cam, "camera_control.cgi?param=5&value=2");
+
+  document.getElementById("flip3").onclick = () =>
+    sendCamCmd(cam, "camera_control.cgi?param=5&value=3");
+
+  document.getElementById("starlight").onclick = () => {
+    sendCamCmd(cam, "camera_control.cgi?param=33&value=0&");
+    sendCamCmd(cam, "camera_control.cgi?param=14&value=0&");
+  };
+
+  document.getElementById("bw").onclick = () => {
+    sendCamCmd(cam, "camera_control.cgi?param=33&value=0&");
+    sendCamCmd(cam, "camera_control.cgi?param=14&value=1&");
+  };
+
+  document.getElementById("osdOn").onclick = () =>
+    sendCamCmd(cam, "camera_control.cgi?param=10&value=1&");
+
+  document.getElementById("osdOff").onclick = () =>
+    sendCamCmd(cam, "camera_control.cgi?param=10&value=0&");
+
+  document.getElementById("motionOn").onclick = () =>
+    sendCamCmd(cam, "set_alarm.cgi?motion_armed=0&motion_sensitivity=0&");
+
+  document.getElementById("motionOff").onclick = () =>
+    sendCamCmd(cam, "set_alarm.cgi?motion_armed=1&motion_sensitivity=6&");
+
+  document.getElementById("sirenOn").onclick = () =>
+    sendCamCmd(cam, "trans_cmd_string.cgi?cmd=2109&command=0&siren=1&");
+
+  document.getElementById("sirenOff").onclick = () =>
+    sendCamCmd(cam, "trans_cmd_string.cgi?cmd=2109&command=0&siren=0&");
+
+  document.getElementById("lightOn").onclick = () =>
+    sendCamCmd(cam, "trans_cmd_string.cgi?cmd=2109&command=0&light=1&");
+
+  document.getElementById("lightOff").onclick = () =>
+    sendCamCmd(cam, "trans_cmd_string.cgi?cmd=2109&command=0&light=0&");
+
+  document.getElementById("ledOn").onclick = () =>
+    sendCamCmd(cam, "trans_cmd_string.cgi?cmd=2125&command=0&hide_led_disable=0&");
+
+  document.getElementById("ledOff").onclick = () =>
+    sendCamCmd(cam, "trans_cmd_string.cgi?cmd=2125&command=0&hide_led_disable=1&");
+}
+
+
+async function sendCamCmd(cam, rawCmd) {
+  const encoded = btoa(rawCmd);
+
+  const params = new URLSearchParams();
+  params.append("action", "CMD");
+  params.append("ip", cam.ip);
+  params.append("session", cam.sessionId);
+  params.append("command", encoded);
+
+  await fetch("/cgi-bin/API.cgi", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
+  });
+
+  // Auto-refresh modal
+  modalRefresh.click();
+  /*
+  setTimeout(() => {
+      modalRefresh.click();
+  }, 250);
+  */
+}
+
+
+async function sendSDCmd(cam, rawCmd) {
+  const encoded = btoa(rawCmd);
+
+  const params = new URLSearchParams();
+  params.append("action", "CMD");
+  params.append("ip", cam.ip);
+  params.append("session", cam.sessionId);
+  params.append("command", encoded);
+
+  const res = await fetch("/cgi-bin/API.cgi", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
+  });
+
+  return await res.text();
+}
+
+
+function sendSDCmd_NEW(url, callback) {
+  fetch(url)
+    .then(r => r.json())
+    .then(json => callback(json))
+    .catch(err => console.error("SD error:", err));
+}
+
+
+
+ptzAddBtn.onclick = () => {
+  ptzAddBox.style.display = 'block';
+  ptzNewName.value = '';
+};
+
+ptzAddConfirm.onclick = async () => {
+  const name = ptzNewName.value.trim();
+  if (!name) return;
+
+  const params = new URLSearchParams();
+  params.append("action", "Add");
+  params.append("ip", PTZ_CAM.ip);
+  params.append("slot", "undefined");
+  params.append("name", name);
+
+  const res = await fetch('/cgi-bin/API.cgi', {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
+  });
+
+  const text = await res.text();
+  const slot = text.replace(/\D/g, '');
+
+  if (!slot) return;
+
+  // Add to modal select
+  const opt = document.createElement('option');
+  opt.value = slot;
+  opt.textContent = name;
+  ptzSelect.appendChild(opt);
+
+  // Add to real lens1 select
+  const realSel = PTZ_WRAPPER.querySelector('.ptz-select');
+  realSel.appendChild(opt.cloneNode(true));
+
+  ptzAddBox.style.display = 'none';
+};
+
+
+ptzUpdateBtn.onclick = async () => {
+  const slot = ptzSelect.value;
+  if (!slot) return;
+
+  const params = new URLSearchParams();
+  params.append("action", "Updatepreset");
+  params.append("ip", PTZ_CAM.ip);
+  params.append("rez", slot);
+
+  await fetch('/cgi-bin/API.cgi', {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
+  });
+};
+
+
+ptzDeleteBtn.onclick = async () => {
+  const slot = ptzSelect.value;
+  if (!slot) return;
+
+  const params = new URLSearchParams();
+  params.append("action", "delpreset");
+  params.append("ip", PTZ_CAM.ip);
+  params.append("rez", slot);
+
+  await fetch('/cgi-bin/API.cgi', {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params.toString()
+  });
+
+  // Remove from modal select
+  ptzSelect.querySelector(`option[value="${slot}"]`).remove();
+
+  // Remove from real lens1 select
+  const realSel = PTZ_WRAPPER.querySelector('.ptz-select');
+  realSel.querySelector(`option[value="${slot}"]`).remove();
+};
+
+function parseRecordDates(json) {
+    if (!json || !Array.isArray(json.dates)) return [];
+    return json.dates;   // dates are already strings
+}
+
+
+function parseRecordFiles(json) {
+    if (!json || !Array.isArray(json.files)) return [];
+    return json.files;   // files are already strings
+}
+
+
+async function fetchSDDates(cam) {
+      console.log(cam);
+      const cmd = `SD_DATES&cam=${cam.ip}`;
+      const json = await sendSDCmd(cam, cmd);
+      return parseRecordDates(json);
+}
+
+async function fetchSDFiles(dirname) {
+      const cmd = `SD_FILES&cam=${this.cam}&date=${dirname}`;
+      const json = await sendSDCmd(cam, cmd);
+      return parseRecordFiles(json);
+}
+
+function formatFileLabel(fname) {
+  const base = fname.split('_')[0];
+  return `${base.slice(0,4)}-${base.slice(4,6)}-${base.slice(6,8)} `
+       + `${base.slice(8,10)}:${base.slice(10,12)}:${base.slice(12,14)}`;
+}
+
+function renderDateList(dates) {
+  sdDateList.innerHTML = '';
+  dates.forEach(d => {
+    const li = document.createElement('li');
+    li.textContent = `${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}`;
+    li.onclick = () => loadFilesForDate(d);
+    sdDateList.appendChild(li);
+  });
+}
+
+async function loadFilesForDate(dirname) {
+  const files = await fetchSDFiles(SD_CAM, dirname);
+  sdFileList.innerHTML = '';
+
+  files.forEach(fname => {
+    const li = document.createElement('li');
+    li.textContent = formatFileLabel(fname);
+    li.onclick = () => {
+      startSDPlayback(SD_MGR, fname);
+      sdModal.style.display = 'none';
+    };
+    sdFileList.appendChild(li);
+  });
+}
+
+
+async function startSDPlayback(mgr, filename) {
+  const cam = mgr.cam;
+  const offset = parseInt(mgr.sdOffset.value || '0', 10);
+
+  // 1. Start SD playback stream
+  await sendSDCmd(cam, 'livestream.cgi?streamid=17&');
+
+  // 2. Start file playback
+  const playCmd = `livestream.cgi?streamid=4&filename=${filename}&offset=${offset}&`;
+  await sendSDCmd(cam, playCmd);
+
+  // 3. Connect both lenses via WebRTC
+  if (!mgr.sessionId) await mgr.startCamera();
+  await mgr.connectBoth();
+
+  mgr.setStatus(`SD Playback: ${filename}`);
+}
+
+
+document.getElementById("ptzMoveBtn").onclick = () => {
+    const x = parseInt(document.getElementById("ptzXPercent").value, 10);
+    const y = parseInt(document.getElementById("ptzYPercent").value, 10);
+
+    if (isNaN(x) || x < 0 || x > 100 ||
+        isNaN(y) || y < 0 || y > 100) {
+        alert("X and Y must be numbers between 0 and 100.");
+        return;
+    }
+
+    const ip = PTZ_CAM.ip;
+    const cam = CAMERAS.find(c => c.ip === ip); // whatever your existing variable is
+
+    fetch(`/cgi-bin/API.cgi`, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: `action=ptz_perc&ip=${cam.ip}&x=${x}&y=${y}`
+    });
+};
+
+
+
+
+const managers = [];
+
+function initCameras() {
+    CAMERAS.forEach((cam, idx) => {
+        const ui = createCameraUI(cam, idx);
+        const mgr = new CameraManager(cam, ui);
+        managers.push(mgr);
+    });
+}
+
+document.addEventListener('DOMContentLoaded', initCameras);
+
+
+window.addEventListener("beforeunload", () => {
+  for (const mgr of managers) {
+    try {
+      mgr.disconnectBoth();
+    } catch (e) {
+      console.warn("Disconnect error during unload:", e);
+    }
+  }
+});
+
+
+/*
+if (window.location.protocol !== 'http:') {window.location = 'http://' + window.location.hostname + ':8082' +  window.location.pathname + window.location.hash;};
+*/
+
+
+
+
+function toggle_disp(el,el2){
+       // Select the element
+      let element = document.getElementById(el);
+    //  let element2 = document.getElementById(el2);
+       // Get the computed style of the element
+      let style = window.getComputedStyle(element);
+
+       // Access the 'display' property
+      let displayValue = style.display;
+
+      //console.log(displayValue); // Outputs the display value, e.g., 'block', 'none', etc.
+
+      if (displayValue=="none"){
+        element.style.display = 'inline-block';
+    //    element2.style.display = 'inline-block';
+      } else {
+        element.style.display = 'none';
+    //    element2.style.display = 'none';
+      }
+}
+
+
+</script>
+
+
+
+
+
+</body></html>
