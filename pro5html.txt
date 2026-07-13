@@ -656,12 +656,12 @@ window.addEventListener("DOMContentLoaded", () => {
   const SERVER = '172.16.147.108:8080';
 
 const CAMERAS = [
-{"ip": "172.16.148.215", "des": "Master Bedroom", "password": "c05f7e3a4479012"},
-{"ip": "172.16.148.216", "des": "Garage", "password": "marshall2"},
-{"ip": "172.16.148.217", "des": "Living room", "password": "d65b7e4919fc01c"},
-{"ip": "172.16.148.218", "des": "Back Yard", "password": "c92a36b81644be"},
-{"ip": "172.16.148.219", "des": "Patio Cam", "password": "marshall3"},
-{"ip": "172.16.148.222", "des": "Garage Corner", "password": "4c1d6c5d1a0984"},
+{"ip": "172.16.148.215", "des": "Master Bedroom", "password": "c05f79012"},
+{"ip": "172.16.148.216", "des": "Garage", "password": "m"},
+{"ip": "172.16.148.217", "des": "Living room", "password": "d65c01c"},
+{"ip": "172.16.148.218", "des": "Back Yard", "password": "c92644be"},
+{"ip": "172.16.148.219", "des": "Patio Cam", "password": "mar"},
+{"ip": "172.16.148.222", "des": "Garage Corner", "password": "4ca0984"},
 ];
 //const WS_BASE = (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.hostname + ':8888/ws';
 const WS_BASE = "ws://172.16.147.108:8888/ws";
